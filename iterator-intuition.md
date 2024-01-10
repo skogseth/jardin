@@ -54,9 +54,10 @@ HashMap / BTreeMap
 - values
 
 Free standing
-- vars/vars_os
+- std::env::vars/std::env::vars_os
+- std::fs::read_dir
 
-### Example
+### Examples
 Taken from a build-script:
 ```rust
 fn valid_env_vars(substr: &str) -> Vec<String> {
@@ -65,6 +66,21 @@ fn valid_env_vars(substr: &str) -> Vec<String> {
         .filter(|s| s.contains(substr))
         .collect()
 } 
+```
+
+Quite involved example around reading a directory
+```rust
+fn get_executables(path: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
+    std::env::read_dir(path)
+        .context("Directory with executables not found")?
+        .filter_map(Result::ok) // <=> |result| result.ok()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext == OsStr::new(".exe"))
+        })
+        .collect()
+}
 ```
 
 ## Consumers
