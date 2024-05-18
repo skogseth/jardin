@@ -1,15 +1,17 @@
 # Iterator intuition
 
 ## Background
-This was inspired by a 201x (2017?) talk by Conor Hoekstra called "Algorithm intuition". This talk was in turn inspired by a 2013 talk by Sean Parent called "???", which talked a lot about rotations (the array kind, not the SO(3) kind), but more importantly emphasized a need for people to learn the algorithms included in the C++ standard library. Sean gave this talk because he in turn had been inspired by the way Alex Stepanov wrote code, which for the uninformed is the father of STL (Standard Template Library) which became the C++ standard library before it's standardization in (I wanna say) 1998.
+This was inspired by a 2019 talk by Conor Hoekstra called "Algorithm intuition". This talk was in turn inspired by a 2013 talk by Sean Parent called "C++ Seasoning" which talked a lot about rotations (the array kind, not the SO(3) kind), but more importantly emphasized a need for people to learn the algorithms included in the C++ standard library. Sean gave this talk because he in turn had been inspired by the way Alex Stepanov wrote code, which for the uninformed is the father of STL (Standard Template Library) which became the C++ standard library before it's standardization in (I wanna say) 1998.
 
 So why? Why do these people, now including me, talk about learning these standard algorithms? And what do I (and Conor Hoekstra) talk about when we say "intuition"? Well, it's largely about writing good code, by which I mean:
+
 - Readable
 - Performant
 - Reliable
-(which I now realize is closely associated with the "reliability / performance / productivity" motto of Rust).
 
-When you use algorithms, and in this talk specifically those associated with Rust's iterators, then you _can_ more easily achieve these. Readable is often beholden to the eye, but more importantly it is something you can train. If you, and others, learn standard algorithms you start to develop a language for communicating programmer intent. This also causes the two other points. When you accurately communicate the intent of your code in the code itself it becomes more readable (as the intent is actually written out), more performant (as you have more accurately told the compiler the constraints of your solution which can be used for optimizations) and more reliable (as you will avoid mismatches between what you meant to write and what you actually wrote). I'll try to get into these points more if there is time.
+(which I now realize is pretty close to the "reliability / performance / productivity" motto of Rust).
+
+When you use algorithms, and in this talk specifically those associated with Rust's iterators, you can more easily achieve these. Readable is often beholden to the eye, but more importantly it is something you can train. If you, and others, learn standard algorithms you start to develop a language for communicating programmer intent. This also causes the two other points. When you accurately communicate the intent of your code in the code itself it becomes more readable (as the intent is actually written out), more performant (as you have more accurately told the compiler the constraints of your solution, which can be used for optimizations) and more reliable (as you will avoid mismatches between what you meant to write and what you actually wrote). I'll try to get into these points more if there is time (lines?).
 
 ## The `Iterator` trait
 The `Iterator` trait is defined as something like:
@@ -20,9 +22,10 @@ pub trait Iterator {
   fn next(&mut self) -> Option<Self::Item>;
 }
 ```
+
 (there are more methods as I am sure you now, we're getting there).
 
-Most are probably familiar with this, but it's worth noting and thinking about the exact concept that this trait is encapsulating, because it's quite limited. It only encapsulates the notion of "something that _may_ yield something when asked to". This is very different from, for example, C++'s iterators, as they are better described as "something that you can iterate through willy nilly". C++'s iterators are more powerful in some ways, being able to implement many algorithms that are far beyond the scope of Rust's iterator trait, but they suffer in other ways. They can't express things that may yield things only once, or iterators that can only be iterated over one way. 
+Most are probably familiar with this, but it's worth noting and thinking about the exact concept that this trait is encapsulating, because it's quite limited. It only encapsulates the notion of "something that _may_ yield something when asked to". This is very different from, for example, C++'s iterators, as they are better described as "something that you can move within". C++'s iterators are more powerful in some ways, being able to implement many algorithms that are far beyond the scope of Rust's iterator trait, but they suffer in other ways. They are known for being notoriously difficult to implement. They also can't express things that may yield things only once, or iterators that can only be iterated over one way.
 
 ## The basics
 
