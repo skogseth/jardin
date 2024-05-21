@@ -227,10 +227,9 @@ fn main() -> Result<(), anyhow::Error> {
         // Let's get the metadata of the file...
         let metadata = file.metadata().context("failed to get metadata")?;
 
-        // ... and print a bunch of shit from it!
-        println!("File created at {:?}", metadata.created()?);
-        println!("File last modified at {:?}", metadata.modified()?);
-        println!("File last accessed at {:?}", metadata.accessed()?);
+        // ... and print some shit!
+        println!("Last modified: {:?}", metadata.modified()?);
+        println!("Last accessed: {:?}", metadata.accessed()?);
 
         // Let's also grab all the content in the file
         let mut buf = String::new();
@@ -268,8 +267,8 @@ mod fs {
             Ok(Self { file: Some(file) })
         }
 
-        pub fn metadata(&self) -> Result<Self, std::io::Error> {
-            self.as_ref().unwrap().metadata()
+        pub fn metadata(&self) -> Result<std::fs::Metadata, std::io::Error> {
+            self.file.as_ref().unwrap().metadata()
         }
 
         pub fn close(mut self) -> Result<(), std::io::Error> {
