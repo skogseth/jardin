@@ -4,15 +4,26 @@ I woke up early the other day and ended up reading "Without boats" newest Rust a
 And then my brain connected the dots: I can probably get something working in Rust _right now_.
 
 ## What's a linear type anyways
-I'll just give a brief description of what I mean when I use the term "linear types", if you're already familiar with them you can skip this section. Objects of linear types have a simple property: They're only used once. This means that the objects are created at some point using a _constructor_, and then at a later point they are destroyed by a _destructor_. This separates them slightly from normal Rust types, which are often referred to as _affine types_: Those only have a single _destructor_, which might not even run as objects can be leaked. 
+I'll just give a brief description of what I mean when I use the term "linear type" (if you're already familiar with them you can skip this section). Objects of linear types have a simple property: They're only used once. This means that the objects are created at some point using a _constructor_, and then at a later point they are destroyed by a _destructor_. There might be many available constructors and destructors, but a single object uses exactly one of each. This separates them slightly from normal Rust types (which are often referred to as _affine types_): Those only have a single destructor, which might not even run as objects can be leaked. 
 
-Let's do an example with a file-type. Assume we have a type called `File`, with a single constructor `fn open(p: &Path) -> Result<File, std::io::Error>`, and a single destuctor `fn close() -> Result<(), std::io::Error>`. The following code would then fail to compile, as the object `f` is created but not destroyed.
+Let's do an example with a file-type, to get a feel for this. Assume we have a type called `File`, with a single constructor `open`, and a single destuctor `close`. We ignore the implementations:
 
 ```
-fn do_things_with_file(path: &Path) -> Result<(), std::io::Error> {
+pub struct File { ... }
+
+impl File {
+    pub fn open(p: &std::path::Path) -> Result<File, std::io::Error> { ... }
+    pub fn close(self) -> Result<(), std::io::Error { ... }
+}
+```
+
+The following code would then fail to compile, as the object `f` is created, but not destroyed:
+
+```
+fn do_things_with_file(path: &std::path::Path) -> Result<(), std::io::Error> {
     let f = File::open(path)?;
 
-    // lots of code
+    // ...
 
     Ok(())
 }
@@ -21,10 +32,10 @@ fn do_things_with_file(path: &Path) -> Result<(), std::io::Error> {
 However, this on the other hand would succeed:
 
 ```
-fn do_things_with_file(path: &Path) -> Result<(), std::io::Error> {
+fn do_things_with_file(path: &std::path::Path) -> Result<(), std::io::Error> {
     let f = File::open(path)?;
 
-    // lots of code
+    // ...
 
     // remember to close the file!
     f.close()?;
@@ -33,14 +44,14 @@ fn do_things_with_file(path: &Path) -> Result<(), std::io::Error> {
 }
 ```
 
-An important point to make is that _all paths_ need to close the file. So if you do early returns you have to remember to close the file in those cases as well:
+An important point to make is that _all paths_ need to close the file, so if you return early you have to remember to close the file in those paths as well:
 
 
 ```
 use std::io::Read;
 
-fn read_to_string(path: &Path) -> Result<String, std::io::Error> {
-    let f = File::open(path)?;
+fn read_to_string(path: &std::path::Path) -> Result<String, std::io::Error> {
+    let mut f = File::open(path)?;
 
     let mut buf = String::new();
     if let Err(e) = f.read_to_string(&mut buf) {
@@ -66,7 +77,7 @@ let a = const { 4 + 3 };
 const { assert!(6 < 13) };
 ```
 
-You probably want to do something cooler than math (although math is pretty dope tbh), but you get the gist. It's a very nice feature, however, we can abuse this. `const`-asserts are a nice way of saying "give me a compilation error if this happens", so let's stick it in a `Drop` to say "if this object is ever dropped, then give me a compilation error".
+You probably want to do something cooler than math (although math is pretty dope tbh), but you get the gist. It's a very nice feature. However, we can abuse this. `const`-asserts are a nice way of saying "give me a compilation error if this happens", so let's stick it in a `drop` to say "if this object is ever dropped, then give me a compilation error".
 
 ```
 struct BadLinearType;
@@ -90,7 +101,9 @@ impl<const DROP: bool> Drop for LinearType<DROP> {
 }
 ```
 
-The `DROP` constant will always be false, so the assert will always fail at every call to drop. But, according to the compiler there is nothing inherently wrong with the implementation of drop itself, so it will still compile. Success! Note that this seems to also work with `const { assert!(false) }`, it appears that the mere presence of the `const`-generic is enough to push the compilation error to only happen if `drop` is called. I assume this is because the error is pushed to each monomorphized version of `drop`, so it needs atleast one callsite to error out.
+The `DROP` constant will always be false, so the assert will fail at every call to drop. But, according to the compiler there is nothing inherently wrong with the implementation of drop itself, so _it_ will still compile. Success! [^1]
+
+[^1]: This seems to also work with `const { assert!(false) }`, it appears that the mere presence of the `const`-generic is enough. I assume this is because the error is pushed to each monomorphized version of `drop`, so it needs atleast one callsite to error out.
 
 Okay, so we have a basic form of linear types in Rust, nice! A couple of bummers:
 1. We need to run `cargo build` in order to get this error, as the call to drop is not inserted in `cargo check`.
@@ -182,12 +195,12 @@ mod fs {
 }
 ```
 
-This works! The file object now needs to be cleaned up up with the `File::close` method through all possible execution paths. However, the problem we solved for `File::close` still persists in the users code. You can't call anything that can panic (from the compiler's perspective) between `File::open` and `File::close`. So all-in-all this linear type is not very useful. 
+This works! The file object now needs to be cleaned up up with the `File::close` method through all possible execution paths. However, the problem we solved for `File::close` still persists in the user's code. You can't call anything that can panic (from the compiler's perspective) between `File::open` and `File::close`. So all-in-all this linear type is not very useful. 
 
 But wait... It's not really the panic that's holding us back, it's the unwinding!
 
 ## Abort!
-Normally when a panic occurs in Rust the program will start to "unwind", meaning it will go reverse over the current stack and clean up anything it comes across by calling `drop` on each varaiable. This is causing us a lot of trouble, but luckily we can turn it off! We can set panics to abort instead of unwind. This means that our program will just hard exit on a panic, instead of trying to clean up neatly after itself. For a lot of programs we don't actually need the unwinding, so we can just as well turn it off here and explore what's possible in this new space. Putting the following in our `Cargo.toml` will set all panics to abort:
+Normally when a panic occurs in Rust the program will start to "unwind", meaning it will go (in reverse) over the current stack and clean up anything it comes across by calling `drop` on each varaiable. This is causing us a lot of trouble, but luckily, we can turn it off! We can set panics to abort instead of unwind. This means that our program will just hard exit on a panic, instead of trying to clean up neatly after itself. For a lot of programs we don't actually need the cleanup, so we can just as well turn it off here, and explore what's possible in this new space. Putting the following in our `Cargo.toml` will set all panics to abort:
  
 ```
 [profile.dev]
@@ -211,6 +224,15 @@ fn main() -> Result<(), anyhow::Error> {
 
     // try blocks would be really nice here
     let result_io = (|| -> Result<String, anyhow::Error> {
+        // Let's get the metadata of the file...
+        let metadata = file.metadata().context("failed to get metadata")?;
+
+        // ... and print a bunch of shit from it!
+        println!("File created at {:?}", metadata.created()?);
+        println!("File last modified at {:?}", metadata.modified()?);
+        println!("File last accessed at {:?}", metadata.accessed()?);
+
+        // Let's also grab all the content in the file
         let mut buf = String::new();
         file.read_to_string(&mut buf).context("failed to read to string")?;
         Ok(buf)
@@ -221,7 +243,7 @@ fn main() -> Result<(), anyhow::Error> {
     // Handle each possible case
     match (result_io, result_close) {
         (Ok(content), Ok(())) => {
-            println!("{content}");
+            println!("File content:\n{content}");
             Ok(())
         }
 
@@ -244,6 +266,10 @@ mod fs {
         pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, std::io::Error> {
             let file = std::fs::File::open(path)?;
             Ok(Self { file: Some(file) })
+        }
+
+        pub fn metadata(&self) -> Result<Self, std::io::Error> {
+            self.as_ref().unwrap().metadata()
         }
 
         pub fn close(mut self) -> Result<(), std::io::Error> {
